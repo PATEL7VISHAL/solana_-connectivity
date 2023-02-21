@@ -52,6 +52,11 @@ const Content = () => {
       <hr />
 
       <button onClick={async () => {
+        let res = await connectivity.createToken();
+        log("res: ", res)
+      }}>create Token</button>
+
+      <button onClick={async () => {
         let res = await connectivity._getTokenInfo();
         log("res: ", res)
       }}>Get token info</button>

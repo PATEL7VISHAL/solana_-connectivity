@@ -10,6 +10,9 @@ import {
     getMint,
     getAssociatedTokenAddressSync,
     createTransferInstruction,
+    createInitializeMintInstruction,
+    createMintToInstruction,
+    MINT_SIZE,
 } from '@solana/spl-token'
 
 
@@ -45,6 +48,39 @@ export class Connectivity {
 
         //! don't forget to init the txis list.
         this.txis = [];
+    }
+
+    async createToken() {
+        //? we are genrating new keypair in which we are allocating space first
+        //? then assing the token details and then token is created.
+        const token_keypair = web3.Keypair.generate();
+
+        //* allocating space for token 
+        //? to allocate space we need to pay the rent so here i am tring to get the rant amount
+        //? you will find the MINT_SIZE variable from spl-token library
+        const rent = await this.connection.getMinimumBalanceForRentExemption(MINT_SIZE);
+
+        const ix1 = web3.SystemProgram.createAccount({
+            fromPubkey: this.wallet.publicKey,
+            lamports: rent,
+            newAccountPubkey: token_keypair.publicKey,
+            programId: TOKEN_PROGRAM_ID, //? here we are creating the token that's why as the program id to token_program_id smart contract which is only one who can change the date inside the token_account. 
+            space: MINT_SIZE,
+        })
+        this.txis.push(ix1)
+
+        //? setting the token initial values.
+        const ix2 = createInitializeMintInstruction(
+            token_keypair.publicKey,
+            5,
+            this.wallet.publicKey,
+            this.wallet.publicKey
+        );
+        this.txis.push(ix2)
+
+        this._sendTransaction([token_keypair]);
+
+        console.log("Token is created : ", token_keypair.publicKey.toBase58())
     }
 
     async _getOrCreateTokenAccount(owner: web3.PublicKey, token: web3.PublicKey, isOffCurve = false) {
@@ -88,17 +124,18 @@ export class Connectivity {
         try {
             const tx = new web3.Transaction().add(...this.txis);
 
-            // signatures.map((e: web3.Keypair) => { tx.sign(e) })
-            for (let i of signatures) {
-                tx.sign(i);
-            }
-
             tx.recentBlockhash = (await this.connection.getLatestBlockhash()).blockhash
 
-            const res = await this.wallet.sendTransaction(tx, this.connection, { preflightCommitment: 'finalized' });
+            // signatures.map((e: web3.Keypair) => { tx.sign(e) })
+            // for (let i of signatures) {
+            //     tx.sign(i);
+            // }
+
+            const res = await this.wallet.sendTransaction(tx, this.connection, { signers: signatures, preflightCommitment: 'finalized' });
             log("Trasaction Sign: ", res);
             alert("Trasaction Sussessful")
         } catch (e) {
+            log("Error: ", e);
             alert("Trasaction Fail")
         }
 
