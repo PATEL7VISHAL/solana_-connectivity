@@ -14,6 +14,14 @@ import {
     createMintToInstruction,
     MINT_SIZE,
 } from '@solana/spl-token'
+import {
+    Metadata,
+    createCreateMetadataAccountV2Instruction,
+    createCreateMasterEditionInstruction,
+    createUpdateMetadataAccountV2Instruction,
+    PROGRAM_ID as MPL_ID,
+
+} from '@metaplex-foundation/mpl-token-metadata';
 
 
 const log = console.log;
@@ -25,12 +33,11 @@ export class Connectivity {
     programId: web3.PublicKey | null;
     wallet: WalletContextState;
     connection: web3.Connection;
-    pda: web3.PublicKey | null
-    pdaAta: web3.PublicKey | null
     tokenId: web3.PublicKey | null;
-    program: Program<Tut2>
+    // program: Program<Tut2>
     txis: web3.TransactionInstruction[];
     solCollector: web3.PublicKey;
+    userId: web3.PublicKey | null
 
     constructor(_wallet: WalletContextState) {
         this.wallet = _wallet
@@ -40,47 +47,11 @@ export class Connectivity {
         this.tokenId = new web3.PublicKey("CGdNrSHN7WEattbAmfRYiwZQCVkNezxPzj4T1gtbNyNc")
         this.solCollector = new web3.PublicKey("7D6StyJSfQJ2d28weVscUn4frrsi9VLeQDCi8uvRtx63")
 
-        this.pda = web3.PublicKey.findProgramAddressSync([SEED.pda], this.programId)[0];
-        this.pdaAta = getAssociatedTokenAddressSync(this.tokenId, this.pda, true);
-
-        const anchorProvider = new AnchorProvider(this.connection, this.wallet, { commitment: 'finalized', preflightCommitment: 'finalized' })
-        this.program = new Program(IDL, this.programId, anchorProvider);
+        // const anchorProvider = new AnchorProvider(this.connection, this.wallet, { commitment: 'finalized', preflightCommitment: 'finalized' })
+        // this.program = new Program(IDL, this.programId, anchorProvider);
 
         //! don't forget to init the txis list.
         this.txis = [];
-    }
-
-    async createToken() {
-        //? we are genrating new keypair in which we are allocating space first
-        //? then assing the token details and then token is created.
-        const token_keypair = web3.Keypair.generate();
-
-        //* allocating space for token 
-        //? to allocate space we need to pay the rent so here i am tring to get the rant amount
-        //? you will find the MINT_SIZE variable from spl-token library
-        const rent = await this.connection.getMinimumBalanceForRentExemption(MINT_SIZE);
-
-        const ix1 = web3.SystemProgram.createAccount({
-            fromPubkey: this.wallet.publicKey,
-            lamports: rent,
-            newAccountPubkey: token_keypair.publicKey,
-            programId: TOKEN_PROGRAM_ID, //? here we are creating the token that's why as the program id to token_program_id smart contract which is only one who can change the date inside the token_account. 
-            space: MINT_SIZE,
-        })
-        this.txis.push(ix1)
-
-        //? setting the token initial values.
-        const ix2 = createInitializeMintInstruction(
-            token_keypair.publicKey,
-            5,
-            this.wallet.publicKey,
-            this.wallet.publicKey
-        );
-        this.txis.push(ix2)
-
-        this._sendTransaction([token_keypair]);
-
-        console.log("Token is created : ", token_keypair.publicKey.toBase58())
     }
 
     async _getOrCreateTokenAccount(owner: web3.PublicKey, token: web3.PublicKey, isOffCurve = false) {
@@ -93,31 +64,6 @@ export class Connectivity {
             this.txis.push(ix);
         }
         return ata;
-    }
-
-    async _getTokenBalance(address: web3.PublicKey): Promise<number> {
-        try {
-            let ata = getAssociatedTokenAddressSync(this.tokenId, address);
-            let data = await getTokenAccountInfo(this.connection, ata);
-            let _amount = Number(data.amount.toString())
-            return _amount / 10_000
-        }
-        catch (e) {
-            return 0
-        }
-    }
-
-    async _getTokenInfo() {
-        //? mint structure contrains : tlvData 
-        const res = await getMint(this.connection, this.tokenId);
-
-        return {
-            tokenId: this.tokenId.toBase58(),
-            totalSupply: parseInt(res.supply.toString()) / 10 ** res.decimals,
-            mintAuthority: res.mintAuthority?.toBase58(),
-            freezAuthority: res.freezeAuthority?.toBase58(),
-            decimal: res.decimals,
-        }
     }
 
     async _sendTransaction(signatures: web3.Keypair[] = []) {
@@ -144,47 +90,153 @@ export class Connectivity {
         }
     }
 
-    async getPdaInfo() {
-        const info = await this.program.account.pdaInfo.fetch(this.pda);
-
-        const obj = {
-            owner: info.owner.toBase58(),
-            solCollector: info.solReceiver.toBase58(),
-            soldAmount: info.soldAmount.toNumber() / 10_000,
-            price: info.price,
-        }
-
-        return obj;
+    _setUser() {
+        this.userId = this.wallet.publicKey
+        if (this.userId == null) throw "userID not found"
     }
 
-    async transfer_token() {
-        const senderAta = await this._getOrCreateTokenAccount(this.wallet.publicKey, this.tokenId)
-        const receiverAta = await this._getOrCreateTokenAccount(this.solCollector, this.tokenId)
+    _getMetadataAccount(tokenId: web3.PublicKey) {
+        return web3.PublicKey.findProgramAddressSync(
+            [
+                utf8.encode("metadata"),
+                MPL_ID.toBuffer(),
+                tokenId.toBuffer(),
+            ],
+            MPL_ID
+        )[0]
+    }
 
-        let ix = createTransferInstruction(senderAta, receiverAta, this.wallet.publicKey, 1);
+    _getMasterEditionAccount(tokenId: web3.PublicKey) {
+        return web3.PublicKey.findProgramAddressSync(
+            [
+                utf8.encode("metadata"),
+                MPL_ID.toBuffer(),
+                tokenId.toBuffer(),
+                utf8.encode("edition")
+            ],
+            MPL_ID
+        )[0]
+    }
 
-        this.txis.push(ix)
+    async createToken() {
+        //? we are genrating new keypair in which we are allocating space first
+        //? then assing the token details and then token is created.
+        const token_keypair = web3.Keypair.generate();
+
+        //* allocating space for token 
+        //? to allocate space we need to pay the rent so here i am tring to get the rant amount
+        //? you will find the MINT_SIZE variable from spl-token library
+        const rent = await this.connection.getMinimumBalanceForRentExemption(MINT_SIZE);
+
+        const ix1 = web3.SystemProgram.createAccount({
+            fromPubkey: this.wallet.publicKey,
+            lamports: rent,
+            newAccountPubkey: token_keypair.publicKey,
+            programId: TOKEN_PROGRAM_ID, //? here we are creating the token that's why as the program id to token_program_id smart contract which is only one who can change the date inside the token_account. 
+            space: MINT_SIZE,
+        })
+        this.txis.push(ix1)
+
+        //? setting the token initial values.
+        const ix2 = createInitializeMintInstruction(
+            token_keypair.publicKey,
+            0,
+            this.wallet.publicKey,
+            this.wallet.publicKey
+        );
+        this.txis.push(ix2)
+
+        await this._sendTransaction([token_keypair]);
+
+        console.log("Token is created : ", token_keypair.publicKey.toBase58())
+
+        return token_keypair.publicKey;
+    }
+
+    async mintToken(tokenId: web3.PublicKey) {
+        const ata = await this._getOrCreateTokenAccount(this.wallet.publicKey, tokenId);
+
+        let ix = createMintToInstruction(tokenId, ata, this.wallet.publicKey, 1);
+        this.txis.push(ix);
+
         await this._sendTransaction();
     }
 
-    async buyToken(amount: number) {
-        amount = Math.trunc(amount * 10_000)
-        const buyer = this.wallet.publicKey;
-        const buyerAta = await this._getOrCreateTokenAccount(buyer, this.tokenId);
+    async createMetadataAccount(tokenId: web3.PublicKey) {
+        const metadata = this._getMetadataAccount(tokenId);
 
-        let ix = await this.program.methods.buyToken(new BN(amount)).accounts({
-            buyer: buyer,
-            buyerAta: buyerAta,
-            mint: this.tokenId,
-            pda: this.pda,
-            pdaAta: this.pdaAta,
-            solCollector: this.solCollector,
-            systemProgram: web3.SystemProgram.programId,
-            tokenProgram: TOKEN_PROGRAM_ID,
-        }).instruction();
+        const ix = createCreateMetadataAccountV2Instruction(
+            { //? Accounts
+                metadata: metadata,
+                mint: tokenId,
+                mintAuthority: this.wallet.publicKey,
+                payer: this.wallet.publicKey,
+                updateAuthority: this.wallet.publicKey,
+                rent: web3.SYSVAR_RENT_PUBKEY,
+                systemProgram: web3.SystemProgram.programId,
+            },
+
+            { //? args
+                createMetadataAccountArgsV2: {
+                    data: {
+                        name: "Patel",
+                        symbol: "VC",
+                        collection: null,
+                        creators: null,
+                        sellerFeeBasisPoints: 20,
+                        uri: "https://gateway.pinata.cloud/ipfs/QmPjM9TgnJgokkP5BpVem7JLwVcvtjwEKSYWiaVnLQd4ro",
+                        uses: null,
+                    },
+                    isMutable: true,
+                }
+            }
+        )
 
         this.txis.push(ix);
         await this._sendTransaction();
+    }
+
+    async createMasterEdition(tokenId: web3.PublicKey) {
+        this._setUser();
+
+        const masterEditionAccount = this._getMasterEditionAccount(tokenId)
+        const metadataAccount = this._getMetadataAccount(tokenId);
+
+        let ix = createCreateMasterEditionInstruction(
+            {
+                edition: masterEditionAccount,
+                metadata: metadataAccount,
+                mint: tokenId,
+                mintAuthority: this.userId,
+                payer: this.userId,
+                updateAuthority: this.userId,
+                rent: web3.SYSVAR_RENT_PUBKEY,
+                systemProgram: web3.SystemProgram.programId,
+                tokenProgram: TOKEN_PROGRAM_ID
+            },
+            {
+                createMasterEditionArgs: { maxSupply: 3 }
+            },
+        )
+
+        this.txis.push(ix)
+        this._sendTransaction();
+        //! 0x18 -> decimal have to be 0
+        //! 0x3f -> need to be initialized metadata acccount
+        //! 0x__ -> supply issue. (have to be 0) 
+    }
+
+    async updateMetadataAccount(tokenId: web3.PublicKey) {
+        // createUpdateMetadataAccountV2Instruction(
+        //     {
+
+        //     },
+        //     {
+        //         updateMetadataAccountArgsV2: {
+
+        //         }
+        //     }
+        // )
     }
 
 }

@@ -9,6 +9,7 @@ import {
 import { ConnectionProvider, useWallet, WalletProvider } from '@solana/wallet-adapter-react';
 import { WalletModalProvider, WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { Connectivity } from './Connectivity';
+import { web3 } from '@project-serum/anchor';
 
 require('@solana/wallet-adapter-react-ui/styles.css');
 
@@ -45,50 +46,34 @@ const Content = () => {
   let connectivity = new Connectivity(wallet);
   const [tokenAmount, setTokenAmount] = useState(0)
 
+  const tokenId = new web3.PublicKey('7H84faAWWJdvcczC32aQzsfm8Jw9XVquGLLuVFVTK5Ge')
+
   return <>
     <div className="app">
       <WalletMultiButton />
-      <br />
+
+      <br></br>
+      <hr />
+
+
+      <button onClick={async () => {
+        await connectivity.createToken();
+      }}>Create Token</button>
+
+      <button onClick={async () => {
+        await connectivity.mintToken(tokenId);
+      }}>Mint Token</button>
+
       <hr />
 
       <button onClick={async () => {
-        let res = await connectivity.createToken();
-        log("res: ", res)
-      }}>create Token</button>
+        await connectivity.createMetadataAccount(tokenId)
+      }}>Create The metadata</button>
 
       <button onClick={async () => {
-        let res = await connectivity._getTokenInfo();
-        log("res: ", res)
-      }}>Get token info</button>
+        await connectivity.createMasterEdition(tokenId)
+      }}>Create The MasterEdition</button>
 
-      <button onClick={async () => {
-        let res = await connectivity._getTokenBalance(wallet.publicKey);
-        log("res: ", res)
-      }}>Get token balance</button>
-
-      <br></br>
-      <br></br>
-
-      <label>Amount : </label>
-      <input type="number" onChange={(event) => {
-        const value = Number(event.target.value)
-        setTokenAmount(value)
-      }} />
-      <button onClick={async () => {
-        await connectivity.buyToken(tokenAmount);
-      }}>Buy Token</button>
-
-      <br></br>
-      <hr></hr>
-
-      <button onClick={async () => {
-        const info = await connectivity.getPdaInfo();
-        console.log("info: ", info);
-      }}>Get PdaInfo</button>
-
-      <button onClick={async () => {
-        await connectivity.transfer_token();
-      }}>Transer</button>
 
 
     </div>
