@@ -2,6 +2,7 @@ import { Program, Wallet, web3, AnchorProvider, BN } from '@project-serum/anchor
 import { utf8 } from '@project-serum/anchor/dist/cjs/utils/bytes';
 import { WalletContextState } from '@solana/wallet-adapter-react';
 import { Tut2, IDL } from './idl'
+import axios from 'axios'
 
 import {
     TOKEN_PROGRAM_ID,
@@ -162,7 +163,41 @@ export class Connectivity {
         await this._sendTransaction();
     }
 
-    async createMetadataAccount(tokenId: web3.PublicKey) {
+    async _updateMetadata(_metadata: any) {
+        const resJSON = await axios({
+            method: "post",
+            url: "https://api.pinata.cloud/pinning/pinJsonToIPFS",
+            data: {
+                "name": _metadata.name,
+                "symbol": _metadata.symbol,
+                "image": _metadata.image
+            },
+            headers: {
+                'pinata_api_key': "8216b9fbbab48995b31e",
+                'pinata_secret_api_key': "abb7156280dcb594f5536f13db203419d5e0979fe95d66e330924c1904c297b4",
+            },
+        })
+
+        const name = _metadata.name
+        const symbol = _metadata.symbol;
+        const uri = `https://gateway.pinata.cloud/ipfs/${resJSON.data.IpfsHash}`
+        // const uri = `ipfs://${resJSON.data.IpfsHash}`
+
+        return {
+            name: name,
+            symbol: symbol,
+            uri: uri,
+        }
+    }
+
+
+    async createMetadataAccount(tokenId: web3.PublicKey, _metadata: any) {
+        const metadataInfo = await this._updateMetadata(_metadata);
+        if (metadataInfo == null) {
+            log("metadata is not uploaded")
+            throw "Failed to upload the metadata"
+        }
+
         const metadata = this._getMetadataAccount(tokenId);
 
         const ix = createCreateMetadataAccountV2Instruction(
@@ -179,12 +214,12 @@ export class Connectivity {
             { //? args
                 createMetadataAccountArgsV2: {
                     data: {
-                        name: "Patel",
-                        symbol: "VC",
+                        name: metadataInfo.name,
+                        symbol: metadataInfo.symbol,
+                        uri: metadataInfo.uri,
                         collection: null,
                         creators: null,
                         sellerFeeBasisPoints: 20,
-                        uri: "https://gateway.pinata.cloud/ipfs/QmPjM9TgnJgokkP5BpVem7JLwVcvtjwEKSYWiaVnLQd4ro",
                         uses: null,
                     },
                     isMutable: true,
@@ -227,16 +262,38 @@ export class Connectivity {
     }
 
     async updateMetadataAccount(tokenId: web3.PublicKey) {
-        // createUpdateMetadataAccountV2Instruction(
-        //     {
-
-        //     },
-        //     {
-        //         updateMetadataAccountArgsV2: {
-
-        //         }
-        //     }
-        // )
+        const metadata = this._getMetadataAccount(tokenId);
+        createUpdateMetadataAccountV2Instruction(
+            {
+                metadata: metadata,
+                updateAuthority: this.wallet.publicKey
+            },
+            {
+                updateMetadataAccountArgsV2: {
+                    data: {
+                        collection: null,
+                        creators: [
+                            {
+                                address: this.wallet.publicKey,
+                                share: 39,
+                                verified: true, //? true means it's foccefuly match that at currently in smart contract can  
+                                //? able to get the the address(this.wallet.publickey) verification as a signer if not found 
+                                //? then address(this.wallet.publickey) as signer then it's throw an error.
+                                // verified: false,//? here we are ignore to checking that address require to signer be signer or not.
+                            }
+                        ],
+                        name: "NEW_NAME",
+                        sellerFeeBasisPoints: 21,
+                        symbol: "NEW_SYMBOL",
+                        uri: "NEW_URI",
+                        uses: null
+                    },
+                    isMutable: true,
+                    primarySaleHappened: false,
+                    updateAuthority: this.wallet.publicKey,
+                }
+            }
+        )
     }
 
 }

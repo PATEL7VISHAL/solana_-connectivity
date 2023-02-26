@@ -45,8 +45,10 @@ const Content = () => {
 
   let connectivity = new Connectivity(wallet);
   const [tokenAmount, setTokenAmount] = useState(0)
-
-  const tokenId = new web3.PublicKey('7H84faAWWJdvcczC32aQzsfm8Jw9XVquGLLuVFVTK5Ge')
+  let name = '';
+  let symbol = '';
+  let image = '';
+  let tokenId: web3.PublicKey = null;
 
   return <>
     <div className="app">
@@ -60,21 +62,69 @@ const Content = () => {
         await connectivity.createToken();
       }}>Create Token</button>
 
+
+      <hr />
+
+      <label htmlFor="">Token ID</label>
+      <input onChange={(event) => {
+        try {
+          tokenId = new web3.PublicKey(event.target.value)
+        } catch (e) {
+          console.log("Wrong Token ID")
+          tokenId = null;
+        }
+      }} type={'text'} />
+      <br />
+      <br />
+
       <button onClick={async () => {
         await connectivity.mintToken(tokenId);
       }}>Mint Token</button>
 
       <hr />
 
+
+      <label htmlFor="">nft name</label>
+      <input onChange={(event) => {
+        name = event.target.value
+      }} type={'text'} />
+      <br />
+
+      <label htmlFor="">nft symbol</label>
+      <input onChange={(event) => {
+        symbol = event.target.value
+      }} type={'text'} />
+      <br />
+
+      <label htmlFor="">nft image url</label>
+      <input onChange={(event) => {
+        image = event.target.value
+      }} type={'text'} />
+      <br />
+
+
       <button onClick={async () => {
-        await connectivity.createMetadataAccount(tokenId)
+        const _metadata = {
+          name: name,
+          symbol: symbol,
+          image: image,
+          attributes: [
+            {
+              "trait_type": 'color',
+              "value": "green"
+            },
+            {
+              "trait_type" : "",
+              "value" : "sdf"
+            }
+          ]
+        }
+        await connectivity.createMetadataAccount(tokenId, _metadata)
       }}>Create The metadata</button>
 
       <button onClick={async () => {
         await connectivity.createMasterEdition(tokenId)
       }}>Create The MasterEdition</button>
-
-
 
     </div>
   </>
