@@ -296,4 +296,65 @@ export class Connectivity {
         )
     }
 
+    async _getAlltokens() {
+        let user = this.wallet.publicKey;
+        if (user == null) throw "Wallet not found !"
+        let res = await this.connection.getTokenAccountsByOwner(user, { programId: TOKEN_PROGRAM_ID });
+        let data: any[] = [];
+
+        for (let i of res.value) {
+            const tokenAccount = i.pubkey
+            try {
+                const res = await getTokenAccountInfo(this.connection, tokenAccount);
+                if (Number(res.amount.toString()) == 0) continue;
+                const tokenId = res.mint;
+                let tokenInfo = {
+                    tokenId: tokenId.toBase58(),
+                    metadata: null,
+                    isNft: false,
+                }
+
+                const metadataAccount = web3.PublicKey.findProgramAddressSync([
+                    utf8.encode("metadata"),
+                    MPL_ID.toBuffer(),
+                    tokenId.toBuffer(),
+                ], MPL_ID)[0]
+
+                try {
+                    const metadataInfo = await Metadata.fromAccountAddress(this.connection, metadataAccount);
+                    let obj = {
+                        name: metadataInfo.data.name.split('\u0000')[0],
+                        symbol: metadataInfo.data.symbol.split('\u0000')[0],
+                        uri: metadataInfo.data.uri.split('\u0000')[0],
+                        uriInfo: null,
+                    }
+
+                    try {
+                        const uriInfo = await (await fetch(obj.uri)).text();
+                        obj.uriInfo = JSON.parse(uriInfo);
+                    } catch (e) {
+                        log("Failed to get uri info from :", obj.uriInfo);
+                    }
+
+                    tokenInfo.metadata = obj;
+                    data.push(tokenInfo);
+
+                    //?CHECKING for nft
+                    const masterEditionAccount = this._getMasterEditionAccount(tokenId);
+                    let _accountInfo = await this.connection.getAccountInfo(masterEditionAccount)
+                    _accountInfo == null ? tokenInfo.isNft = false : tokenInfo.isNft = true;
+
+                }
+                catch (e) {
+                    log("Failed to get Token metadata of: ", tokenId.toBase58())
+                    data.push(tokenInfo);
+                }
+            } catch (e) {
+                log("Failed to tokenAccountInfo for :", tokenAccount.toBase58())
+            }
+        }
+
+        return data;
+    }
+
 }

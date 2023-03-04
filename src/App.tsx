@@ -10,6 +10,7 @@ import { ConnectionProvider, useWallet, WalletProvider } from '@solana/wallet-ad
 import { WalletModalProvider, WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { Connectivity } from './Connectivity';
 import { web3 } from '@project-serum/anchor';
+import TokenList from './TokenList';
 
 require('@solana/wallet-adapter-react-ui/styles.css');
 
@@ -114,8 +115,8 @@ const Content = () => {
               "value": "green"
             },
             {
-              "trait_type" : "",
-              "value" : "sdf"
+              "trait_type": "",
+              "value": "sdf"
             }
           ]
         }
@@ -126,6 +127,13 @@ const Content = () => {
         await connectivity.createMasterEdition(tokenId)
       }}>Create The MasterEdition</button>
 
+      <hr />
+
+      {/* <button onClick={async () => {
+        await connectivity._getAlltokens()
+      }}>Get All Token details</button> */}
+
+      <TokenList />
     </div>
   </>
 }
